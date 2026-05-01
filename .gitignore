@@ -1,0 +1,38 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Django
+*.sqlite3
+db.sqlite3
+media/
+staticfiles/
+/static/
+
+.pytest_cache/
+.coverage
+htmlcov/
+
+uploads/
+qdrant_storage/
+
+Readme.md
+
+
+# Environment
+.env
+.env.*
+
+
+
+venv/
+env/
+.venv/
+
+# IDEs / editors
+.vscode/
+.DS_Store
+
+# Logs
+*.log
