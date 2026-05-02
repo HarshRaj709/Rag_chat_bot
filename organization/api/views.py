@@ -4,6 +4,7 @@ from organization.email import send_invite_email
 from organization.models import Organisation, OrgMembership, OrgInvite
 from rest_framework.permissions import IsAuthenticated
 from common.permissions import IsOrgAdmin, IsOrgMember
+from common.mixins import GetOrgMixin
 from .serializers import OrgSerializer, OrgDetailSerializer, OrgInviteSerializer, OrgInviteAcceptSerializer, UpdateMemberRoleSerializer
 from django.shortcuts import get_object_or_404 
 from rest_framework import status
@@ -119,7 +120,7 @@ class UpdateMemberRoleView(UpdateAPIView):
 
 
 #Organization invites views
-class OrgInviteListCreateView(ListAPIView, CreateAPIView):
+class OrgInviteListCreateView(GetOrgMixin, ListAPIView, CreateAPIView):
     """
     GET  /orgs/<pk>/invites/   — list all pending invites for this org
     POST /orgs/<pk>/invites/   — send a new invite
@@ -127,12 +128,6 @@ class OrgInviteListCreateView(ListAPIView, CreateAPIView):
     """
     permission_classes = [IsAuthenticated, IsOrgAdmin]
     serializer_class = OrgInviteSerializer
-
-    def get_org(self):
-        # cache so we don't hit DB twice
-        if not hasattr(self, "_org"):
-            self._org = get_object_or_404(Organisation, pk=self.kwargs["pk"])
-        return self._org
 
     def get_serializer_context(self):
         # inject org into serializer context so serializer.validate_email can use it

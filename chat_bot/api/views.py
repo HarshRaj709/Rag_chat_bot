@@ -6,6 +6,7 @@ from django.shortcuts import get_object_or_404
 from asgiref.sync import sync_to_async
 
 from common.rag import rag_service
+from common.mixins import GetOrgMixin
 from rest_framework.generics import ListCreateAPIView, RetrieveUpdateAPIView, GenericAPIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -19,14 +20,9 @@ from .serializers import BotSerializer, BotDetailSerializer
 
 logger = logging.getLogger(__name__)
 
-class BotListCreateView(ListCreateAPIView):
+class BotListCreateView(GetOrgMixin, ListCreateAPIView):
     permission_classes = [IsAuthenticated, IsOrgMember]
     serializer_class = BotSerializer
-
-    def get_org(self):
-        if not hasattr(self, "_org"):
-            self._org = get_object_or_404(Organisation, pk=self.kwargs["pk"])
-        return self._org
 
     def get_serializer_context(self):
         context = super().get_serializer_context()
@@ -48,15 +44,10 @@ class BotListCreateView(ListCreateAPIView):
         return Response(data, status=status.HTTP_201_CREATED)
 
 
-class BotDetailView(RetrieveUpdateAPIView):
+class BotDetailView(GetOrgMixin, RetrieveUpdateAPIView):
     permission_classes = [IsAuthenticated, IsOrgMember]
     serializer_class = BotDetailSerializer
     http_method_names = ["get", "patch"]
-
-    def get_org(self):
-        if not hasattr(self, "_org"):
-            self._org = get_object_or_404(Organisation, pk=self.kwargs["pk"])
-        return self._org
 
     def get_serializer_context(self):
         context = super().get_serializer_context()
@@ -72,16 +63,11 @@ class BotDetailView(RetrieveUpdateAPIView):
         )
 
 
-class BotDeactivateView(GenericAPIView):
+class BotDeactivateView(GetOrgMixin, GenericAPIView):
     """
     soft delete bots
     """
     permission_classes = [IsAuthenticated, IsOrgMember]
-
-    def get_org(self):
-        if not hasattr(self, "_org"):
-            self._org = get_object_or_404(Organisation, pk=self.kwargs["pk"])
-        return self._org
 
     def post(self, request, *args, **kwargs):
         bot = get_object_or_404(
@@ -94,16 +80,11 @@ class BotDeactivateView(GenericAPIView):
         bot.save(update_fields=["is_active"])
         return Response({"detail": "Bot deactivated."}, status=status.HTTP_200_OK)
     
-class BotAPIKeyRotateView(GenericAPIView):
+class BotAPIKeyRotateView(GetOrgMixin, GenericAPIView):
     """
     Revokes all existing keys and generates a fresh one.
     """
     permission_classes = [IsAuthenticated, IsOrgMember]
-
-    def get_org(self):
-        if not hasattr(self, "_org"):
-            self._org = get_object_or_404(Organisation, pk=self.kwargs["pk"])
-        return self._org
 
     def post(self, request, *args, **kwargs):
         bot = get_object_or_404(

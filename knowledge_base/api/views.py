@@ -2,6 +2,7 @@ from rest_framework.response import Response
 from rest_framework.generics import ListCreateAPIView, RetrieveUpdateDestroyAPIView, UpdateAPIView, DestroyAPIView, GenericAPIView
 from rest_framework.permissions import IsAuthenticated
 from common.permissions import IsOrgAdmin, IsOrgMember
+from common.mixins import GetOrgMixin
 from knowledge_base.models import KnowledgeBase, KBDocument
 from organization.models import Organisation
 from .serializers import KnowledgeBaseSerializer, KBDetailSerializer, KBIngestSerializer, KBDocumentSerializer
@@ -12,14 +13,9 @@ from knowledge_base.utils import extract_text
 from django.utils import timezone
 
 
-class KBListCreateView(ListCreateAPIView):
+class KBListCreateView(GetOrgMixin, ListCreateAPIView):
     permission_classes = [IsAuthenticated, IsOrgMember, IsOrgAdmin]
     serializer_class = KnowledgeBaseSerializer
-
-    def get_org(self):      #cache
-        if not hasattr(self, "_org"):
-            self._org = get_object_or_404(Organisation, pk=self.kwargs["pk"])
-        return self._org
 
     def get_serializer_context(self):  
         context = super().get_serializer_context()
@@ -30,17 +26,10 @@ class KBListCreateView(ListCreateAPIView):
         return KnowledgeBase.objects.filter(org=self.get_org())
     
 
-class KBDetailView(RetrieveUpdateDestroyAPIView):
+class KBDetailView(GetOrgMixin, RetrieveUpdateDestroyAPIView):
     permission_classes = [IsAuthenticated, IsOrgMember]
     serializer_class = KBDetailSerializer
     http_method_names = ["get", "patch", "delete"]
-
-
-    def get_org(self):
-        if not hasattr(self, '_org'):
-            self._org = get_object_or_404(Organisation, id=self.kwargs['pk'])
-        return self._org
-
 
     def get_serializer_context(self):
         context =  super().get_serializer_context()
@@ -58,16 +47,11 @@ class KBDetailView(RetrieveUpdateDestroyAPIView):
         rag_service.delete_collection(instance.qdrant_collection)
         instance.delete()
     
-class KBDocumentDeleteView(GenericAPIView):
+class KBDocumentDeleteView(GetOrgMixin, GenericAPIView):
     """
     Single document delete.
     """
     permission_classes = [IsAuthenticated, IsOrgMember]
-
-    def get_org(self):
-        if not hasattr(self, "_org"):
-            self._org = get_object_or_404(Organisation, pk=self.kwargs["pk"])
-        return self._org
     
     def delete(self, request, *args, **kwargs):
             org = self.get_org()
@@ -86,17 +70,12 @@ class KBDocumentDeleteView(GenericAPIView):
             return Response(status=status.HTTP_204_NO_CONTENT)
     
 
-class KBIngestView(GenericAPIView):
+class KBIngestView(GetOrgMixin, GenericAPIView):
     """
     Ingest docs
     """
     permission_classes = [IsAuthenticated, IsOrgMember]
     serializer_class = KBIngestSerializer
-
-    def get_org(self):
-        if not hasattr(self, "_org"):
-            self._org = get_object_or_404(Organisation, pk=self.kwargs["pk"])
-        return self._org
 
     def post(self, request, *args, **kwargs):
         org = self.get_org()
