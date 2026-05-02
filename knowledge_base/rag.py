@@ -3,7 +3,7 @@ import uuid
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_openai import OpenAIEmbeddings
 from qdrant_client import QdrantClient
-from qdrant_client.models import VectorParams, Distance, PointStruct, Filter, FieldCondition, MatchValue
+from qdrant_client.models import VectorParams, Distance, PointStruct, Filter, FieldCondition, MatchValue, PayloadSchemaType
 from django.conf import settings
 
 
@@ -12,7 +12,7 @@ class KBRagService:
         self.embeddings = OpenAIEmbeddings(
             model="text-embedding-3-small",
             openai_api_key=settings.OPENROUTER_API_KEY,
-            base_url=settings.BASE_URL,
+            base_url=settings.BASE_URL
         )
         self.qdrant = QdrantClient(
             url=settings.QDRANT_URL,
@@ -25,6 +25,12 @@ class KBRagService:
             self.qdrant.create_collection(
                 collection_name=collection_name,
                 vectors_config=VectorParams(size=1536, distance=Distance.COSINE),
+            )
+            # Create index for document_id field to enable filtering
+            self.qdrant.create_payload_index(
+                collection_name=collection_name,
+                field_name="document_id",
+                field_schema=PayloadSchemaType.KEYWORD,
             )
 
     def ingest(self, kb, document, text: str) -> int:
@@ -50,7 +56,7 @@ class KBRagService:
                 payload={
                     "content": chunk,
                     "document_id": str(document.id),   # key for per-document deletion
-                    "filename": document.original_filename,
+                    "filename": document.filename,
                 }
             )
             for chunk, vec in zip(chunks, vectors)

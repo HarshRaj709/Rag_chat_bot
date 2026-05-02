@@ -98,6 +98,11 @@ DATABASES = {
 
 
 # settings.py
+OPENROUTER_API_KEY = os.environ.get('OPENROUTER_API_KEY')
+QDRANT_URL = os.environ.get('QDRANT_URL')
+QDRANT_API_KEY = os.environ.get('QDRANT_API_KEY')
+BASE_URL = os.environ.get('BASE_URL')
+
 EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
 EMAIL_HOST = "smtp.gmail.com"
 EMAIL_PORT = 587

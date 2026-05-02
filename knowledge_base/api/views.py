@@ -4,10 +4,12 @@ from rest_framework.permissions import IsAuthenticated
 from common.permissions import IsOrgAdmin, IsOrgMember
 from knowledge_base.models import KnowledgeBase, KBDocument
 from organization.models import Organisation
-from .serializers import KnowledgeBaseSerializer, KBDetailSerializer, KBIngestSerializer
+from .serializers import KnowledgeBaseSerializer, KBDetailSerializer, KBIngestSerializer, KBDocumentSerializer
 from django.shortcuts import get_object_or_404
 from rest_framework import status
 from knowledge_base.rag import rag_service
+from knowledge_base.utils import extract_text
+from django.utils import timezone
 
 
 class KBListCreateView(ListCreateAPIView):
@@ -43,15 +45,11 @@ class KBDetailView(RetrieveUpdateDestroyAPIView):
         if not hasattr(self, '_org'):
             self._org = get_object_or_404(Organisation, id=self.kwargs['pk'])
         return self._org
-    
-    def get_serializer_class(self):
-        if self.request.method == 'GET':
-            return KnowledgeBaseSerializer
-        return KBDetailSerializer
 
-    def get_parser_context(self, http_request):
-        context =  super().get_parser_context()
-        context['org'] = self.kwargs['pk']
+
+    def get_serializer_context(self):
+        context =  super().get_serializer_context()
+        context['org'] = self.get_org()
         return context
     
     def get_object(self):
@@ -62,7 +60,6 @@ class KBDetailView(RetrieveUpdateDestroyAPIView):
         )
     
     def perform_destroy(self, instance):
-        # hard delete Qdrant collection first, then the DB row
         rag_service.delete_collection(instance.qdrant_collection)
         instance.delete()
     
@@ -128,7 +125,7 @@ class KBIngestView(GenericAPIView):
         # create document record first — so we have an ID for vector payloads
         document = KBDocument.objects.create(
             kb=kb,
-            original_filename=uploaded_file.name,
+            filename=uploaded_file.name,
             storage_path="",        # update below after storage upload
             chunk_count=0,          # update below after ingestion
         )
