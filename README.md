@@ -108,9 +108,7 @@ The goal of this project is to:
 # 📌 Project Plan: RAG SaaS Chat Bot (API-Based Integration)
 
 
-
-
-## 🚀 Overview
+## 🚀 Overview <a href="https://documenter.getpostman.com/view/41362344/2sBXqKofTd">API Documentation</a>
 
 This project is a **Django-based RAG (Retrieval-Augmented Generation) SaaS platform** for building **organization-specific chatbots**.
 
