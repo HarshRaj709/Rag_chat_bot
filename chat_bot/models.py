@@ -1,28 +1,53 @@
+# bot/models.py
 from django.db import models
+from django.utils.text import slugify
 from organization.models import Organisation
 from knowledge_base.models import KnowledgeBase
-import secrets, hashlib
+import secrets, hashlib, uuid
 from common.models import BaseModel
 
-# Create your models here.
+
 class Bot(BaseModel):
     org = models.ForeignKey(Organisation, on_delete=models.CASCADE, related_name="bots")
     name = models.CharField(max_length=120)
-    slug = models.SlugField(unique=True)
+    slug = models.SlugField(unique=True, editable=False)
+    system_prompt = models.TextField(
+        blank=True,
+        default="You are a helpful assistant. Answer only using the provided context."
+    )
     kbs = models.ManyToManyField(KnowledgeBase, related_name="bots", blank=True)
     temperature = models.FloatField(default=0.2)
     max_tokens = models.IntegerField(default=512)
     is_active = models.BooleanField(default=True)
-    created_at = models.DateTimeField(auto_now_add=True)
+
+    def save(self, *args, **kwargs):
+        if not self.slug:
+            self.slug = self._generate_unique_slug()
+        super().save(*args, **kwargs)
+
+    def _generate_unique_slug(self):
+        base = slugify(self.name)
+        slug = base
+        counter = 1
+        while Bot.objects.filter(slug=slug).exists():
+            slug = f"{base}-{counter}"
+            counter += 1
+        return slug
+
+    @property    #getter
+    def public_url(self):
+        return f"/api/bot/{self.slug}/chat/"
+
+    def __str__(self):
+        return f"{self.org.name} / {self.name}"
 
 
 class BotAPIKey(BaseModel):
     bot = models.ForeignKey(Bot, on_delete=models.CASCADE, related_name="api_keys")
-    name = models.CharField(max_length=80)
+    name = models.CharField(max_length=80, default="default")
     prefix = models.CharField(max_length=12)
     key_hash = models.CharField(max_length=64, unique=True)
     is_active = models.BooleanField(default=True)
-    created_at = models.DateTimeField(auto_now_add=True)
 
     @classmethod
     def generate(cls, bot, name="default"):
@@ -34,12 +59,14 @@ class BotAPIKey(BaseModel):
     @classmethod
     def verify(cls, raw_key):
         hashed = hashlib.sha256(raw_key.encode()).hexdigest()
-        return cls.objects.select_related("bot").get(
+        return cls.objects.select_related("bot").prefetch_related("bot__kbs").get(
             key_hash=hashed, is_active=True, bot__is_active=True
         )
 
+    def __str__(self):
+        return f"{self.bot.name} / {self.name}"
+
 
 class BotUsage(BaseModel):
-    api_key = models.ForeignKey(BotAPIKey, on_delete=models.CASCADE)
+    api_key = models.ForeignKey(BotAPIKey, on_delete=models.CASCADE, related_name="usage")
     tokens_used = models.IntegerField(default=0)
-    created_at = models.DateTimeField(auto_now_add=True)

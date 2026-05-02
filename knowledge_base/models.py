@@ -4,7 +4,6 @@ from common.models import BaseModel
 from organization.models import Organisation
     
 
-# Create your models here.
 class KnowledgeBase(BaseModel):
     org = models.ForeignKey(Organisation, on_delete=models.CASCADE, related_name="kbs")
     name = models.CharField(max_length=120)
@@ -17,10 +16,6 @@ class KnowledgeBase(BaseModel):
             self.qdrant_collection = f"kb_{self.id}"
         super().save(*args, **kwargs)
 
-    # def delete(self, *args, **kwargs):
-    #     from .qdrant import delete_collection
-    #     delete_collection(self.qdrant_collection)
-    #     super().delete(*args, **kwargs)
 
     class Meta:
         constraints = [

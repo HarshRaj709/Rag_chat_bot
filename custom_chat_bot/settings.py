@@ -28,6 +28,7 @@ SECRET_KEY = os.environ.get("SECRET_KEY", "django-insecure-ljn1a(_#ui0(+-l0bk6%f
 DEBUG = os.environ.get("DEBUG", "True") == "True"
 
 ALLOWED_HOSTS = []
+CORS_ALLOW_ALL_ORIGINS = True
 
 
 # Application definition
@@ -83,7 +84,8 @@ TEMPLATES = [
     },
 ]
 
-WSGI_APPLICATION = "custom_chat_bot.wsgi.application"
+# WSGI_APPLICATION = "custom_chat_bot.wsgi.application"
+ASGI_APPLICATION = "custom_chat_bot.asgi.application"
 
 
 # Database
@@ -102,6 +104,7 @@ OPENROUTER_API_KEY = os.environ.get('OPENROUTER_API_KEY')
 QDRANT_URL = os.environ.get('QDRANT_URL')
 QDRANT_API_KEY = os.environ.get('QDRANT_API_KEY')
 BASE_URL = os.environ.get('BASE_URL')
+REDIS_URL = os.environ.get('REDIS_URL')
 
 EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
 EMAIL_HOST = "smtp.gmail.com"
