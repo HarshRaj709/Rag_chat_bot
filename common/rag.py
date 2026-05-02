@@ -117,10 +117,10 @@ class RAGService:
 # retrieval
 
     async def retrieve_context(self, bot, question: str) -> str:
-        print('this is question', question)
+        # print('this is question', question)
         q_vec = await sync_to_async(self.embeddings.embed_query)(question)
         kbs = await sync_to_async(list)(bot.kbs.all())
-        print("get all the kbs", kbs)
+        # print("get all the kbs", kbs)
 
         all_hits = []
         for kb in kbs:
@@ -130,10 +130,11 @@ class RAGService:
                     query=q_vec,
                     limit=4,
                 )
-                print("got this in result", results)
+                # print("got this in result", results)
                 all_hits.extend(results.points)
             except Exception as e:
                 print(f"[RAG] Qdrant search error for {kb.qdrant_collection}: {e}")
+                pass
 
         if not all_hits:
             return "No relevant information found."

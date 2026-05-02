@@ -1,6 +1,114 @@
-# 📌 Project Plan: RAG SaaS Chat Bot (API-Based Integration)
+# 🚀 Introduction
+
+This project started from a simple problem I faced while building my first RAG-based chatbot — a **portfolio assistant** that could answer questions about my experience, education, and projects. That bot is already integrated into my portfolio website and can interact with users in real time.
+
+While building it, I realized something important:
+
+> Every individual or organization has data — but not everyone has an easy way to turn that data into an intelligent, conversational system.
+
+That idea led to the creation of this platform.
 
 ---
+
+## 💡 What This Project Does
+
+This is a **RAG (Retrieval-Augmented Generation) SaaS platform** that allows anyone to:
+
+* Upload their documents
+* Automatically process and structure their knowledge
+* Generate a chatbot powered by their own data
+* Integrate that chatbot directly into their website using APIs
+
+No need to build RAG pipelines from scratch.
+
+---
+
+## 🏗️ Core Concept
+
+Users can:
+
+* Sign up and create an **organization**
+* Invite team members with **role-based access control**
+
+  * **Owner / Admin / Member**
+* Manage knowledge and bots in a **multi-tenant environment**
+
+Only **owners and admins** can perform critical/destructive actions like deletion.
+
+---
+
+## 📚 Knowledge Management
+
+* Create multiple **Knowledge Bases**
+* Each knowledge base can contain multiple documents
+* Supported formats:
+
+  * PDF
+  * DOCX
+  * Markdown
+  * TXT
+
+Each document goes through:
+
+* Text extraction
+* Chunking using **Recursive Text Splitter**
+* Storage for retrieval
+
+---
+
+## 🤖 Bot System
+
+Users can create bots connected to their knowledge:
+
+* Each bot gets a **unique slug** → used to generate a public API endpoint
+* Bots can be connected to **multiple knowledge bases**
+* Bots respond strictly based on provided documents
+
+---
+
+## 🔐 Security (Important Design Decision)
+
+When a bot is created:
+
+* A **secret API key** is generated
+* The **raw key is shown only once**
+* Only a **hashed version is stored in the database**
+
+If the key is lost:
+
+* Users must generate a new one (cannot retrieve old key)
+
+---
+
+## 🔗 Integration
+
+Bots are **API-first**:
+
+* Can be integrated into any website or application
+* Communication happens via secure API requests
+* No UI/widget dependency — full flexibility for frontend
+
+---
+
+## 🧠 Smart Responses
+
+* Responses are generated using document context (RAG)
+* Bot maintains **short-term memory (last 10 messages)** for context-aware conversations
+
+---
+
+## 🎯 Vision
+
+The goal of this project is to:
+
+> Make it effortless for anyone to convert their documents into an intelligent, production-ready chatbot — without worrying about infrastructure, vector databases, or LLM pipelines.
+
+---
+
+# 📌 Project Plan: RAG SaaS Chat Bot (API-Based Integration)
+
+
+
 
 ## 🚀 Overview
 
@@ -113,20 +221,19 @@ Response returned via API
 
 ## ⚙️ Current Focus: Document Chunking
 
-### Implemented / In Progress:
+### Implemented:
 
 * Upload document
 * Extract text
 * Split into chunks
 * Store chunks
 
-👉 No embeddings yet (planned)
 
 ---
 
-## 🔄 Planned Ingestion Pipeline
+## 🔄 Ingestion Pipeline
 
-* Async processing (Celery)
+* Async processing (Celery) - Future plan
 * Steps:
 
   1. Text extraction
@@ -154,7 +261,7 @@ Bots are accessed via **secure API keys**
 ### Example Request
 
 ```http id="c07hgp"
-POST /api/bots/{bot_id}/chat/
+POST /api/chat/bot/{unique-slug}/chat/
 ```
 
 Headers:
@@ -167,7 +274,8 @@ Body:
 
 ```json id="6dtp9s"
 {
-  "message": "What services do you offer?"
+  "query": "What services do you offer?",
+  "session_id": "bd98146c-ae25-4e43-a861-6f2a930ceaa1"
 }
 ```
 
@@ -206,19 +314,22 @@ Body:
 * **Auth:** JWT
 * **Async (planned):** Celery + Redis
 * **DB:** SQLite (dev), PostgreSQL (planned)
-* **Vector DB (planned):** Qdrant
-* **AI (planned):** OpenAI API
+* **Vector DB:** Qdrant
+* **Embedding Model:** OpenAI text-embedding-3-small
+* **LLM Model:** deepseek/deepseek-chat-v3-0324
 
 ---
 
-## 🧪 What to Build Next
+## 🧪 Completed
 
 1. Document upload + chunking completion
 2. Chunk storage & retrieval logic
 3. Bot chat API (basic retrieval)
 4. API key generation & validation
 5. Permission enforcement
-6. Usage tracking per bot key
+
+## Left 
+1. Usage tracking per bot key
 
 ---
 
@@ -236,8 +347,8 @@ python manage.py runserver
 * ✅ Organization system complete
 * ✅ Invite flow implemented
 * ✅ Knowledge base APIs done
-* ⏳ Document chunking in progress
-* ⏳ Bot + chat APIs pending
-* ⏳ Retrieval + LLM pending
+* ✅ Document chunking in progress
+* ✅ Bot + chat APIs pending
+* ✅ Retrieval + LLM pending
 
 ---
