@@ -11,6 +11,8 @@ from qdrant_client.models import (
     VectorParams, Distance, PointStruct,
     Filter, FieldCondition, MatchValue, PayloadSchemaType
 )
+import asyncio
+from asgiref.sync import sync_to_async
 from django.conf import settings
 import redis.asyncio as aioredis
 import json
@@ -115,6 +117,62 @@ class RAGService:
         )
 
 # retrieval
+    # async def retrieve_context(self, bot, question: str) -> str:
+    #     # Convert question to embedding
+    #     q_vec = await sync_to_async(self.embeddings.embed_query)(question)
+
+    #     # Load all KBs attached to the bot
+    #     kbs = await sync_to_async(list)(bot.kbs.all())
+
+    #     if not kbs:
+    #         return "No knowledge base attached to this bot."
+
+    #     async def search_collection(kb):
+    #         try:
+    #             result = await sync_to_async(self.qdrant.query_points)(
+    #                 collection_name=kb.qdrant_collection,
+    #                 query=q_vec,
+    #                 limit=4,
+    #             )
+    #             return result.points
+
+    #         except Exception as e:
+    #             print(
+    #                 f"[RAG] Qdrant search error "
+    #                 f"for {kb.qdrant_collection}: {e}"
+    #             )
+    #             return []
+
+    #     # Search all collections concurrently
+    #     search_results = await asyncio.gather(
+    #         *(search_collection(kb) for kb in kbs)
+    #     )
+
+    #     # Flatten results
+    #     all_hits = [
+    #         hit
+    #         for collection_hits in search_results
+    #         for hit in collection_hits
+    #     ]
+
+    #     if not all_hits:
+    #         return "No relevant information found."
+
+    #     # Sort by similarity score
+    #     all_hits.sort(
+    #         key=lambda hit: hit.score,
+    #         reverse=True
+    #     )
+
+    #     # Keep best chunks
+    #     top_hits = all_hits[:6]
+
+    #     context = "\n\n".join(
+    #         hit.payload.get("content", "")
+    #         for hit in top_hits
+    #     )
+
+    #     return context
 
     async def retrieve_context(self, bot, question: str) -> str:
         # print('this is question', question)

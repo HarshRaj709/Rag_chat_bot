@@ -8,6 +8,7 @@ from common.models import BaseModel
 
 
 class Bot(BaseModel):
+    allowed_domains = models.JSONField(default=list)
     org = models.ForeignKey(Organisation, on_delete=models.CASCADE, related_name="bots")
     name = models.CharField(max_length=120)
     slug = models.SlugField(unique=True, editable=False)

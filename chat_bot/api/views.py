@@ -4,7 +4,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
 from django.shortcuts import get_object_or_404
 from asgiref.sync import sync_to_async
-
+from urllib.parse import urlparse
 from common.rag import rag_service
 from common.mixins import GetOrgMixin
 from rest_framework.generics import ListCreateAPIView, RetrieveUpdateAPIView, GenericAPIView
@@ -128,6 +128,25 @@ class BotChatView(View):
 
         if bot.slug != slug:
             return JsonResponse({"error": "API key does not match this bot."}, status=403)
+        
+        origin = request.headers.get("Origin")  
+        if not origin:
+            return JsonResponse(
+                {"error": "Origin header required."},
+                status=403,
+            )      
+        parsed = urlparse(origin)
+        hostname = parsed.hostname
+
+        allowed_domains = bot.allowed_domains or []
+
+        if hostname not in allowed_domains:
+            return JsonResponse(
+                {
+                    "error": f"Domain '{hostname}' is not allowed."
+                },
+                status=403,
+            )
 
         try:
             body = json.loads(request.body)
@@ -159,8 +178,10 @@ class BotChatView(View):
                 "Cache-Control": "no-cache",
                 "Connection": "keep-alive",
                 "X-Accel-Buffering": "no",
-                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Origin": origin,
             },
         )
     
 # uvicorn custom_chat_bot.asgi:application --reload
+
+# ragbot_live_jLtFJqXs67WzwxzG_j-_C71f9TxTHQaG9kQjVi6nTio

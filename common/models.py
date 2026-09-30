@@ -8,4 +8,4 @@ class BaseModel(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        abstract = True
+        abstract = True             # with that django will not create the table for this model
