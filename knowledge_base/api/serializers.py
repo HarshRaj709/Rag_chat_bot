@@ -6,7 +6,7 @@ from user.models import User
 class KnowledgeBaseSerializer(serializers.ModelSerializer):
     class Meta:
         model= KnowledgeBase
-        fields = ['id', 'name']
+        fields = ['id', 'name', 'description']
 
     def validate_name(self, value):
         org = self.context['org']
@@ -36,8 +36,8 @@ class KBDetailSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = KnowledgeBase
-        fields = ("id", "name", "qdrant_collection", "document_count", "documents", "created_at", "updated_at")
-        read_only_fields = fields
+        fields = ("id", "name", "description", "qdrant_collection", "document_count", "documents", "created_at", "updated_at")
+        read_only_fields = ("id", "qdrant_collection", "document_count", "documents", "created_at", "updated_at")
 
     def get_document_count(self, obj):
         return obj.documents.count()
@@ -47,7 +47,7 @@ class KBIngestSerializer(serializers.Serializer):
     file = serializers.FileField()
 
     def validate_file(self, value):
-        allowed_extensions = [".pdf", ".txt", ".docx"]
+        allowed_extensions = [".pdf", ".txt", ".md", ".docx"]
         ext = os.path.splitext(value.name)[1].lower()
         if ext not in allowed_extensions:
             raise serializers.ValidationError(

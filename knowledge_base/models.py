@@ -7,6 +7,7 @@ from organization.models import Organisation
 class KnowledgeBase(BaseModel):
     org = models.ForeignKey(Organisation, on_delete=models.CASCADE, related_name="kbs")
     name = models.CharField(max_length=120)
+    description = models.TextField(blank=True, default="")
     qdrant_collection = models.CharField(max_length=200, unique=True, editable=False)
 
     def save(self, *args, **kwargs):
