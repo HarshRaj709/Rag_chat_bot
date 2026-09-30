@@ -29,6 +29,7 @@ class RAGService:
         self.qdrant = QdrantClient(
             url=settings.QDRANT_URL,
             api_key=settings.QDRANT_API_KEY,
+            check_compatibility=False,
         )
         self.redis = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
 

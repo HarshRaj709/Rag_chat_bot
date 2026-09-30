@@ -29,6 +29,7 @@ langchain-openai = "==1.2.1"
 openai = "==2.33.0"
 qdrant-client = "==1.17.1"
 uvicorn = "==0.46.0"
+django-cors-headers = "==4.3.1"
 
 [dev-packages]
 
