@@ -129,24 +129,23 @@ class BotChatView(View):
         if bot.slug != slug:
             return JsonResponse({"error": "API key does not match this bot."}, status=403)
         
-        origin = request.headers.get("Origin")  
-        if not origin:
-            return JsonResponse(
-                {"error": "Origin header required."},
-                status=403,
-            )      
-        parsed = urlparse(origin)
-        hostname = parsed.hostname
-
+        origin = request.headers.get("Origin")
         allowed_domains = bot.allowed_domains or []
 
-        if hostname not in allowed_domains:
-            return JsonResponse(
-                {
-                    "error": f"Domain '{hostname}' is not allowed."
-                },
-                status=403,
-            )
+        # Enforce only when allowlist is configured and Origin is present.
+        # Empty allowlist = allow all (dev / direct API use).
+        # Missing Origin = non-browser client (Postman/curl) — skip check.
+        if origin and allowed_domains:
+            parsed = urlparse(origin)
+            hostname = parsed.hostname
+
+            if hostname not in allowed_domains:
+                return JsonResponse(
+                    {
+                        "error": f"Domain '{hostname}' is not allowed."
+                    },
+                    status=403,
+                )
 
         try:
             body = json.loads(request.body)
@@ -171,15 +170,17 @@ class BotChatView(View):
                 yield f"data: {json.dumps({'error': str(e)})}\n\n"
                 yield f"data: {json.dumps({'done': True})}\n\n"
 
+        sse_headers = {
+                "Cache-Control": "no-cache",
+                "X-Accel-Buffering": "no",
+            }
+        if origin:
+            sse_headers["Access-Control-Allow-Origin"] = origin
+
         return StreamingHttpResponse(
             event_stream(),
             content_type="text/event-stream",
-            headers={
-                "Cache-Control": "no-cache",
-                "Connection": "keep-alive",
-                "X-Accel-Buffering": "no",
-                "Access-Control-Allow-Origin": origin,
-            },
+            headers=sse_headers,
         )
     
 # uvicorn custom_chat_bot.asgi:application --reload

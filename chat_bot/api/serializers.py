@@ -17,6 +17,7 @@ class BotSerializer(serializers.ModelSerializer):
         fields = (
             "id", "name", "slug", "system_prompt",
             "temperature", "max_tokens", "is_active",
+            "allowed_domains",
             "public_url", "created_at", "updated_at"
         )
         read_only_fields = ("id", "slug", "public_url", "created_at", "updated_at")
@@ -48,6 +49,7 @@ class BotDetailSerializer(serializers.ModelSerializer):
         fields = (
             "id", "name", "slug", "system_prompt",
             "temperature", "max_tokens", "is_active",
+            "allowed_domains",
             "public_url", "kbs", "kb_ids", "api_keys",
             "created_at", "updated_at"
         )

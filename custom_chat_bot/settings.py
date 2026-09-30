@@ -27,13 +27,14 @@ SECRET_KEY = os.environ.get("SECRET_KEY", "django-insecure-ljn1a(_#ui0(+-l0bk6%f
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.environ.get("DEBUG", "True") == "True"
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ["localhost", "127.0.0.1"]  # Update this with your allowed hosts in production
 CORS_ALLOW_ALL_ORIGINS = True
 
 
 # Application definition
 
 INSTALLED_APPS = [
+    "corsheaders",
     "rest_framework",
     "drf_spectacular",
     "rest_framework_simplejwt",
@@ -57,6 +58,7 @@ INSTALLED_APPS += [
     ]
 
 MIDDLEWARE = [
+    "corsheaders.middleware.CorsMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -111,7 +113,8 @@ EMAIL_HOST = "smtp.gmail.com"
 EMAIL_PORT = 587
 EMAIL_USE_TLS = True
 EMAIL_HOST_USER = os.environ.get("EMAIL_HOST_USER")
-EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD")
+# Gmail App Passwords are shown as "xxxx xxxx xxxx xxxx" — strip spaces
+EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD", "").replace(" ", "")
 DEFAULT_FROM_EMAIL = os.environ.get(
     "DEFAULT_FROM_EMAIL",
     os.environ.get("EMAIL_HOST_USER", "harsh709sahu@gmail.com"),
