@@ -16,7 +16,8 @@ ROLE_CHOICES = [
 STATUS = [
     ("pending", "Pending"),
     ("accepted", "Accepted"),
-    ("expired", "Expired")
+    ("expired", "Expired"),
+    ("failed", "Failed"),
 ]
 
 
@@ -27,7 +28,7 @@ class Organisation(BaseModel):
     )
 
     def __str__(self):
-        return self.name
+        return f"{self.name} ({self.id})"
     
     class Meta:
         constraints = [

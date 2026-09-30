@@ -137,13 +137,20 @@ class OrgInviteListCreateView(GetOrgMixin, ListAPIView, CreateAPIView):
 
     def get_queryset(self):
         return OrgInvite.objects.filter(
-            org=self.get_org(), status="pending"
+            org=self.get_org(), status__in=["pending", "failed"]
         ).select_related("invited_by")
 
     def perform_create(self, serializer):
         invite = serializer.save()
         # send email after the invite row is safely committed
-        send_invite_email(invite)
+        # if SMTP fails, mark as failed (not pending) so FE can show resend
+        try:
+            send_invite_email(invite)
+        except Exception:
+            import logging
+            logging.getLogger(__name__).exception("Failed to send invite email")
+            invite.status = "failed"
+            invite.save(update_fields=["status"])
 
     # ListAPIView uses get(), CreateAPIView uses post()
     # combining both in one view means one URL handles both methods cleanly

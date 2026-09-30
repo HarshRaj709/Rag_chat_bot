@@ -4,7 +4,7 @@ from django.conf import settings
 
 
 def send_invite_email(invite):
-    invite_link = f"http://localhost:8000/api/invites/accept/?token={invite.token}"     #f"{settings.FRONTEND_URL}/invites/accept/?token={invite.token}"
+    invite_link = f"{settings.FRONTEND_URL}/invites/accept/?token={invite.token}"
     
     send_mail(
         subject=f"You're invited to join {invite.org.name}",
