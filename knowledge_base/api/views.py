@@ -14,8 +14,14 @@ from django.utils import timezone
 
 
 class KBListCreateView(GetOrgMixin, ListCreateAPIView):
-    permission_classes = [IsAuthenticated, IsOrgMember, IsOrgAdmin]
+    permission_classes = [IsAuthenticated, IsOrgMember]
     serializer_class = KnowledgeBaseSerializer
+
+    def get_permissions(self):
+        # members can list, only admin/owner can create
+        if self.request.method == "POST":
+            return [IsAuthenticated(), IsOrgMember(), IsOrgAdmin()]
+        return [IsAuthenticated(), IsOrgMember()]
 
     def get_serializer_context(self):  
         context = super().get_serializer_context()
@@ -30,6 +36,12 @@ class KBDetailView(GetOrgMixin, RetrieveUpdateDestroyAPIView):
     permission_classes = [IsAuthenticated, IsOrgMember]
     serializer_class = KBDetailSerializer
     http_method_names = ["get", "patch", "delete"]
+
+    def get_permissions(self):
+        # members can view/update, only admin/owner can delete
+        if self.request.method == "DELETE":
+            return [IsAuthenticated(), IsOrgMember(), IsOrgAdmin()]
+        return [IsAuthenticated(), IsOrgMember()]
 
     def get_serializer_context(self):
         context =  super().get_serializer_context()
