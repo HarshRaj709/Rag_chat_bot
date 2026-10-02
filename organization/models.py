@@ -38,6 +38,7 @@ class Organisation(BaseModel):
                 name="unique_org_per_user_case_insensitive"
             )
         ]
+        ordering = ['-created_at']
     
     @classmethod
     def create_with_owner(cls, user, **data):

@@ -25,6 +25,7 @@ class KnowledgeBase(BaseModel):
             name='unique_kb_name_per_org'
             )
         ]
+        ordering = ['-created_at']
 
 
 class KBDocument(BaseModel):

@@ -11,6 +11,7 @@ from rest_framework import status
 from common.rag import rag_service
 from knowledge_base.utils import extract_text
 from django.utils import timezone
+from asgiref.sync import async_to_sync
 
 
 class KBListCreateView(GetOrgMixin, ListCreateAPIView):
@@ -56,7 +57,7 @@ class KBDetailView(GetOrgMixin, RetrieveUpdateDestroyAPIView):
         )
     
     def perform_destroy(self, instance):
-        rag_service.delete_collection(instance.qdrant_collection)
+        async_to_sync(rag_service.delete_collection)(instance.qdrant_collection)
         instance.delete()
     
 class KBDocumentDeleteView(GetOrgMixin, GenericAPIView):
@@ -71,7 +72,7 @@ class KBDocumentDeleteView(GetOrgMixin, GenericAPIView):
             document = get_object_or_404(KBDocument, pk=self.kwargs["doc_pk"], kb=kb)
 
             try:
-                rag_service.delete_document_vectors(kb, str(document.id))
+                async_to_sync(rag_service.delete_document_vectors)(kb, str(document.id))
             except Exception as e:
                 return Response(
                     {"error": f"Failed to delete vectors: {str(e)}"},
@@ -112,7 +113,11 @@ class KBIngestView(GetOrgMixin, GenericAPIView):
             chunk_count=0,      
         )
         try:
-            chunk_count = rag_service.ingest(kb, document, text)
+            chunk_count = async_to_sync(rag_service.ingest)(
+                kb,
+                document,
+                text
+            )
         except Exception as e:
             document.delete()
             return Response({"error": f"Ingestion failed: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

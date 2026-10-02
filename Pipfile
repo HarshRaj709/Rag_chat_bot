@@ -30,6 +30,8 @@ openai = "==2.33.0"
 qdrant-client = "==1.17.1"
 uvicorn = "==0.46.0"
 django-cors-headers = "==4.3.1"
+langgraph = "==1.2.12"
+langchain-core = "==1.6.6"
 
 [dev-packages]
 
