@@ -85,7 +85,7 @@ class RAGState(TypedDict, total=False):
 
 
 class RAGService:
-    def __init__(self) -> None:
+    def __init__(self) -> None:   #this is shared between all requests, so we can keep clients and semaphores here
         self._embed_model = _cfg("RAG_EMBED_MODEL", "text-embedding-3-small")
         self._embed_dim = _cfg("RAG_EMBED_DIM", 1536)
         self._sem = asyncio.Semaphore(_cfg("RAG_MAX_CONCURRENCY", 8))
@@ -283,7 +283,7 @@ class RAGService:
             return {"context": "No knowledge base attached to this bot.", "sources": []}
 
         vector = await self.embed_query(state["question"])
-        results = await asyncio.gather(*(self._search_collection(c, vector) for c in collections))
+        results = await asyncio.gather(*(self._search_collection(c, vector) for c in collections))      #search same query embedding in all collections in parallel, and gather results
 
         hits = sorted((h for r in results for h in r), key=lambda h: h.score, reverse=True)
         hits = hits[: _cfg("RAG_TOP_K_FINAL", 6)]
@@ -349,7 +349,7 @@ class RAGService:
         g.add_edge("retrieve", "generate")
         g.add_edge("generate", "save_history")
         g.add_edge("save_history", END)
-        return g.compile()
+        return g.compile()          #thee end result of this graph is a callable that takes a RAGState and RunnableConfig and returns a RAGState
 
     # ----------------------------------------------------------------------- #
     # Public API
@@ -377,7 +377,7 @@ class RAGService:
             if isinstance(content, str) and content:
                 yield content
 
-    async def ask(self, bot, session_id: str, question: str) -> dict:
+    async def ask(self, bot, session_id: str, question: str) -> dict:           #this will return answer and sources, but not stream, so it will wait for the whole answer to be generated before returning
         """Non-streaming variant; returns answer + sources."""
         state, config = await self._build_inputs(bot, session_id, question)
         out = await self.graph.ainvoke(state, config)

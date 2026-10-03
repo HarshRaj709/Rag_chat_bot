@@ -120,7 +120,7 @@ class BotChatView(View):
 
         raw_key = auth[len("Bearer "):]
         try:
-            api_key_obj = await sync_to_async(BotAPIKey.verify)(raw_key)
+            api_key_obj = await sync_to_async(BotAPIKey.verify)(raw_key)  #verification at each request, so we can revoke keys and rotate them, expensive as calling DB each time, but we can cache them in memory if needed
         except BotAPIKey.DoesNotExist:
             return JsonResponse({"error": "Invalid or inactive API key."}, status=401)
 

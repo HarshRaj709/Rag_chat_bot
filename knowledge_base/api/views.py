@@ -98,7 +98,7 @@ class KBIngestView(GetOrgMixin, GenericAPIView):
         serializer.is_valid(raise_exception=True)
 
         uploaded_file = serializer.validated_data["file"]
-        content = uploaded_file.read()
+        content = uploaded_file.read()    #open whole in memeory, should be fine for small files, but we can switch to streaming if needed
 
         try:
             text = extract_text(content, uploaded_file.name)
