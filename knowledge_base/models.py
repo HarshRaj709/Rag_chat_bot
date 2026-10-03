@@ -29,8 +29,22 @@ class KnowledgeBase(BaseModel):
 
 
 class KBDocument(BaseModel):
+    STATUS_PENDING = "pending"
+    STATUS_PROCESSING = "processing"
+    STATUS_READY = "ready"
+    STATUS_FAILED = "failed"
+    STATUS_CHOICES = [
+        (STATUS_PENDING, "Pending"),
+        (STATUS_PROCESSING, "Processing"),
+        (STATUS_READY, "Ready"),
+        (STATUS_FAILED, "Failed"),
+    ]
+
     kb = models.ForeignKey(KnowledgeBase, on_delete=models.CASCADE, related_name="documents")
     filename = models.CharField(max_length=255)
     storage_path = models.CharField(max_length=500)
+    file_size = models.BigIntegerField(default=0)
+    status = models.CharField(max_length=16, choices=STATUS_CHOICES, default=STATUS_PENDING)
+    error_message = models.TextField(blank=True, default="")
     chunk_count = models.IntegerField(default=0)
     ingested_at = models.DateTimeField(null=True, blank=True)
