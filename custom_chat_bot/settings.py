@@ -122,6 +122,22 @@ DEFAULT_FROM_EMAIL = os.environ.get(
 
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:3000")
 
+MEDIA_URL = "/media/"
+MEDIA_ROOT = BASE_DIR / "media"
+
+# Celery — broker + result backend share REDIS_URL by default.
+# Production: set CELERY_BROKER_URL / CELERY_RESULT_BACKEND explicitly
+# (e.g. separate Redis DBs) and run a persistent worker + beat.
+CELERY_BROKER_URL = os.environ.get("CELERY_BROKER_URL", os.environ.get("REDIS_URL", "redis://localhost:6379/0"))
+CELERY_RESULT_BACKEND = os.environ.get("CELERY_RESULT_BACKEND", os.environ.get("REDIS_URL", "redis://localhost:6379/0"))
+CELERY_TASK_ALWAYS_EAGER = os.environ.get("CELERY_TASK_ALWAYS_EAGER", "False") == "True"
+CELERY_TASK_ACKS_LATE = True
+CELERY_WORKER_PREFETCH_MULTIPLIER = 1
+CELERY_TASK_REJECT_ON_WORKER_LOST = True
+CELERY_TASK_TIME_LIMIT = 30 * 60  # hard kill after 30 min (ingest of large docs)
+CELERY_TASK_SOFT_TIME_LIMIT = 25 * 60
+CELERY_RESULT_EXTENDED = True
+
 # for development — prints emails to console instead of sending
 # EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 

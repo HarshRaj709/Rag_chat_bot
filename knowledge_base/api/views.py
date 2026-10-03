@@ -1,17 +1,30 @@
-from rest_framework.response import Response
-from rest_framework.generics import ListCreateAPIView, RetrieveUpdateDestroyAPIView, UpdateAPIView, DestroyAPIView, GenericAPIView
-from rest_framework.permissions import IsAuthenticated
-from common.permissions import IsOrgAdmin, IsOrgMember
-from common.mixins import GetOrgMixin
-from knowledge_base.models import KnowledgeBase, KBDocument
-from organization.models import Organisation
-from .serializers import KnowledgeBaseSerializer, KBDetailSerializer, KBIngestSerializer, KBDocumentSerializer
+from django.core.files.base import ContentFile
+from django.core.files.storage import default_storage
+from django.db import transaction
+from django.db.models import Count, Sum, Value
+from django.db.models.functions import Coalesce
 from django.shortcuts import get_object_or_404
 from rest_framework import status
-from common.rag import rag_service
-from knowledge_base.utils import extract_text
-from django.utils import timezone
-from asgiref.sync import async_to_sync
+from rest_framework.generics import GenericAPIView, ListCreateAPIView, RetrieveUpdateDestroyAPIView
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+
+from common.mixins import GetOrgMixin
+from common.permissions import IsOrgAdmin, IsOrgMember
+from knowledge_base.models import KBDocument, KnowledgeBase
+from knowledge_base.tasks import (
+    delete_collection_task,
+    delete_document_vectors_task,
+    document_storage_path,
+    ingest_document_task,
+)
+
+from .serializers import (
+    KBDetailSerializer,
+    KBDocumentSerializer,
+    KBIngestSerializer,
+    KnowledgeBaseSerializer,
+)
 
 
 class KBListCreateView(GetOrgMixin, ListCreateAPIView):
@@ -30,7 +43,10 @@ class KBListCreateView(GetOrgMixin, ListCreateAPIView):
         return context
 
     def get_queryset(self):
-        return KnowledgeBase.objects.filter(org=self.get_org())
+        return KnowledgeBase.objects.filter(org=self.get_org()).annotate(
+            annotated_document_count=Count("documents", distinct=True),
+            annotated_chunks_count=Coalesce(Sum("documents__chunk_count"), Value(0)),
+        )
     
 
 class KBDetailView(GetOrgMixin, RetrieveUpdateDestroyAPIView):
@@ -51,42 +67,62 @@ class KBDetailView(GetOrgMixin, RetrieveUpdateDestroyAPIView):
     
     def get_object(self):
         return get_object_or_404(
-            KnowledgeBase,
+            KnowledgeBase.objects.annotate(
+                annotated_document_count=Count("documents", distinct=True),
+                annotated_chunks_count=Coalesce(Sum("documents__chunk_count"), Value(0)),
+            ),
             pk=self.kwargs["kb_pk"],
             org=self.get_org()
         )
     
     def perform_destroy(self, instance):
-        async_to_sync(rag_service.delete_collection)(instance.qdrant_collection)
+        # Delete the DB row now; vector cleanup is best-effort background work
+        # so a slow Qdrant call never blocks the response.
+        collection = instance.qdrant_collection
         instance.delete()
-    
-class KBDocumentDeleteView(GetOrgMixin, GenericAPIView):
-    """
-    Single document delete.
+        transaction.on_commit(lambda: delete_collection_task.delay(collection))
+
+
+class KBDocumentDetailView(GetOrgMixin, GenericAPIView):
+    """Polling endpoint for FE: GET -> {status: pending|processing|ready|failed}.
+
+    Also handles DELETE (same path as before — backward compatible).
     """
     permission_classes = [IsAuthenticated, IsOrgMember]
-    
+    serializer_class = KBDocumentSerializer
+
+    def get_object(self):
+        kb = get_object_or_404(KnowledgeBase, pk=self.kwargs["kb_pk"], org=self.get_org())
+        return get_object_or_404(KBDocument, pk=self.kwargs["doc_pk"], kb=kb)
+
+    def get(self, request, *args, **kwargs):
+        return Response(KBDocumentSerializer(self.get_object()).data)
+
     def delete(self, request, *args, **kwargs):
-            org = self.get_org()
-            kb = get_object_or_404(KnowledgeBase, pk=self.kwargs["kb_pk"], org=org)
-            document = get_object_or_404(KBDocument, pk=self.kwargs["doc_pk"], kb=kb)
+        kb = get_object_or_404(KnowledgeBase, pk=self.kwargs["kb_pk"], org=self.get_org())
+        document = get_object_or_404(KBDocument, pk=self.kwargs["doc_pk"], kb=kb)
 
-            try:
-                async_to_sync(rag_service.delete_document_vectors)(kb, str(document.id))
-            except Exception as e:
-                return Response(
-                    {"error": f"Failed to delete vectors: {str(e)}"},
-                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
-                )
+        collection = kb.qdrant_collection
+        doc_id = str(document.id)
+        storage_path = document.storage_path
+        document.delete()
 
-            document.delete()
-            return Response(status=status.HTTP_204_NO_CONTENT)
-    
+        if storage_path and default_storage.exists(storage_path):
+            default_storage.delete(storage_path)
+        # Best-effort: row is already gone, vectors cleaned async.
+        transaction.on_commit(
+            lambda: delete_document_vectors_task.delay(collection, doc_id)
+        )
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class KBDocumentDeleteView(KBDocumentDetailView):
+    """Backward-compat alias (DELETE only usage)."""
+    http_method_names = ["delete", "options", "head"]
+
 
 class KBIngestView(GetOrgMixin, GenericAPIView):
-    """
-    Ingest docs
-    """
+    """Enqueue ingestion, return 202 immediately. FE polls document status."""
     permission_classes = [IsAuthenticated, IsOrgMember]
     serializer_class = KBIngestSerializer
 
@@ -98,35 +134,48 @@ class KBIngestView(GetOrgMixin, GenericAPIView):
         serializer.is_valid(raise_exception=True)
 
         uploaded_file = serializer.validated_data["file"]
-        content = uploaded_file.read()    #open whole in memeory, should be fine for small files, but we can switch to streaming if needed
+        content = uploaded_file.read()  # 20MB max enforced by serializer
+        if not content:
+            return Response({"error": "Uploaded file is empty."}, status=status.HTTP_400_BAD_REQUEST)
 
-        try:
-            text = extract_text(content, uploaded_file.name)
-        except ValueError as e:
-            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
-
-        #document store first, to get id for vector payloads
         document = KBDocument.objects.create(
             kb=kb,
             filename=uploaded_file.name,
-            storage_path="",        
-            chunk_count=0,      
+            storage_path="",
+            file_size=uploaded_file.size,
+            status=KBDocument.STATUS_PENDING,
         )
-        try:
-            chunk_count = async_to_sync(rag_service.ingest)(
-                kb,
-                document,
-                text
-            )
-        except Exception as e:
-            document.delete()
-            return Response({"error": f"Ingestion failed: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        storage_path = document_storage_path(document.id, uploaded_file.name)
+        default_storage.save(storage_path, ContentFile(content))
+        document.storage_path = storage_path
+        document.save(update_fields=["storage_path", "updated_at"])
 
-        document.chunk_count = chunk_count
-        document.ingested_at = timezone.now()
-        document.save(update_fields=["chunk_count", "ingested_at"]) #partial update
+        # Enqueue only after commit so the worker always sees the row.
+        transaction.on_commit(lambda: ingest_document_task.delay(str(document.id)))
 
         return Response(
             KBDocumentSerializer(document).data,
-            status=status.HTTP_201_CREATED
+            status=status.HTTP_202_ACCEPTED,
         )
+
+
+class KBDocumentRetryView(GetOrgMixin, GenericAPIView):
+    """Re-enqueue a failed document: POST -> 202 {status: pending}."""
+    permission_classes = [IsAuthenticated, IsOrgMember]
+    serializer_class = KBDocumentSerializer
+
+    def post(self, request, *args, **kwargs):
+        kb = get_object_or_404(KnowledgeBase, pk=self.kwargs["kb_pk"], org=self.get_org())
+        document = get_object_or_404(KBDocument, pk=self.kwargs["doc_pk"], kb=kb)
+
+        if document.status in (KBDocument.STATUS_PENDING, KBDocument.STATUS_PROCESSING):
+            return Response(
+                {"detail": f"Document is already {document.status}; poll its status."},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        document.status = KBDocument.STATUS_PENDING
+        document.error_message = ""
+        document.save(update_fields=["status", "error_message", "updated_at"])
+        transaction.on_commit(lambda: ingest_document_task.delay(str(document.id)))
+        return Response(KBDocumentSerializer(document).data, status=status.HTTP_202_ACCEPTED)

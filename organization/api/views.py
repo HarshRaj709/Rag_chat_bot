@@ -1,6 +1,5 @@
 from rest_framework.response import Response
 from rest_framework.generics import ListAPIView, UpdateAPIView, CreateAPIView, DestroyAPIView, RetrieveAPIView, GenericAPIView
-from organization.email import send_invite_email
 from organization.models import Organisation, OrgMembership, OrgInvite
 from rest_framework.permissions import IsAuthenticated
 from common.permissions import IsOrgAdmin, IsOrgMember
@@ -142,15 +141,12 @@ class OrgInviteListCreateView(GetOrgMixin, ListAPIView, CreateAPIView):
 
     def perform_create(self, serializer):
         invite = serializer.save()
-        # send email after the invite row is safely committed
-        # if SMTP fails, mark as failed (not pending) so FE can show resend
-        try:
-            send_invite_email(invite)
-        except Exception:
-            import logging
-            logging.getLogger(__name__).exception("Failed to send invite email")
-            invite.status = "failed"
-            invite.save(update_fields=["status"])
+        # Never block the request on SMTP: enqueue and send after commit so
+        # the worker always sees the invite row. Failures flip status to
+        # `failed` (after retries) so FE can show Resend.
+        from organization.tasks import send_invite_email_task
+
+        transaction.on_commit(lambda: send_invite_email_task.delay(str(invite.id)))
 
     # ListAPIView uses get(), CreateAPIView uses post()
     # combining both in one view means one URL handles both methods cleanly
