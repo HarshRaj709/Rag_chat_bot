@@ -30,6 +30,8 @@ DEBUG = os.environ.get("DEBUG", "True") == "True"
 ALLOWED_HOSTS = ["localhost", "127.0.0.1", "rag-chat-bot-5yva.onrender.com"]  # Update this with your allowed hosts in production
 CORS_ALLOWED_ORIGINS = [
     "https://harshraj709.github.io",
+    "http://localhost:5500",
+    "http://127.0.0.1:5500",
 ]
 CSRF_TRUSTED_ORIGINS = [
     "https://harshraj709.github.io",
