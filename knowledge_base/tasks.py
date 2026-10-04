@@ -10,7 +10,6 @@ from __future__ import annotations
 import logging
 import os
 
-from asgiref.sync import async_to_sync
 from celery import shared_task
 from django.core.files.storage import default_storage
 from django.utils import timezone
@@ -67,11 +66,16 @@ def ingest_document_task(self, document_id: str) -> dict:
 
         text = extract_text(content, document.filename)
 
-        # Lazy import: rag_service connects at RAGService() instantiation and
-        # would crash the worker at import time if env is missing.
-        from common.rag import rag_service
+        # Sync service: no event loop involved at all, so the
+        # "Event loop is closed" bug class cannot happen. Fresh instance per
+        # task + explicit close = no cross-task connection reuse.
+        from common.rag_sync import SyncRAGIngestService
 
-        chunk_count = async_to_sync(rag_service.ingest)(document.kb, document, text)
+        service = SyncRAGIngestService()
+        try:
+            chunk_count = service.ingest(document.kb, document, text)
+        finally:
+            service.close()
 
         document.chunk_count = chunk_count
         document.status = KBDocument.STATUS_READY
@@ -97,11 +101,15 @@ def ingest_document_task(self, document_id: str) -> dict:
              autoretry_for=(Exception,), retry_backoff=30, retry_backoff_max=300)
 def delete_document_vectors_task(collection: str, document_id: str) -> dict:
     """Best-effort vector cleanup after the DB row is gone (fire-and-forget)."""
-    from common.rag import rag_service
+    from common.rag_sync import SyncRAGIngestService
     from knowledge_base.models import KnowledgeBase
 
     kb = KnowledgeBase(qdrant_collection=collection)  # lightweight stand-in, no DB hit
-    async_to_sync(rag_service.delete_document_vectors)(kb, str(document_id))
+    service = SyncRAGIngestService()
+    try:
+        service.delete_document_vectors(kb, str(document_id))
+    finally:
+        service.close()
     return {"ok": True}
 
 
@@ -109,9 +117,13 @@ def delete_document_vectors_task(collection: str, document_id: str) -> dict:
              autoretry_for=(Exception,), retry_backoff=30, retry_backoff_max=300)
 def delete_collection_task(collection: str) -> dict:
     """Best-effort collection cleanup after the KB row is gone."""
-    from common.rag import rag_service
+    from common.rag_sync import SyncRAGIngestService
 
-    async_to_sync(rag_service.delete_collection)(collection)
+    service = SyncRAGIngestService()
+    try:
+        service.delete_collection(collection)
+    finally:
+        service.close()
     return {"ok": True}
 
 

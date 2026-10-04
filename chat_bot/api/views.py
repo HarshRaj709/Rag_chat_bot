@@ -5,7 +5,7 @@ from django.utils.decorators import method_decorator
 from django.shortcuts import get_object_or_404
 from asgiref.sync import sync_to_async
 from urllib.parse import urlparse
-from common.rag import rag_service
+from common.rag import get_rag_service
 from common.mixins import GetOrgMixin
 from rest_framework.generics import ListCreateAPIView, RetrieveUpdateAPIView, GenericAPIView
 from rest_framework.permissions import IsAuthenticated
@@ -162,7 +162,8 @@ class BotChatView(View):
 
         async def event_stream():
             try:
-                async for token in rag_service.stream(bot, session_id, query):
+                service = get_rag_service()  # lazy singleton, lives on the ASGI loop only
+                async for token in service.stream(bot, session_id, query):
                     yield f"data: {json.dumps({'token': token, 'session_id': session_id})}\n\n"
                 yield f"data: {json.dumps({'token': '', 'session_id': session_id, 'done': True})}\n\n"
             except Exception as e:

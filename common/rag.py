@@ -1,19 +1,16 @@
 # rag/service.py
 """
-Async RAG service built on LangGraph.
+Async RAG chat service (ASGI only).
 
 Graph:  load_history -> retrieve -> generate -> save_history
 
-Requirements:
-    langgraph, langchain-openai, langchain-core, langchain-text-splitters,
-    openai>=1.40, qdrant-client>=1.10, redis>=5, Django>=4.2
+Chat path only: embed query -> search Qdrant -> generate -> Redis history.
+Ingestion / deletion lives in ``common.rag_sync.SyncRAGIngestService`` (sync,
+for Celery — no event loop, so no "Event loop is closed" bug class).
 
 Optional Django settings (defaults in brackets):
     RAG_CHAT_MODEL        ["deepseek/deepseek-chat-v3-0324"]
     RAG_EMBED_MODEL       ["text-embedding-3-small"]
-    RAG_EMBED_DIM         [1536]
-    RAG_CHUNK_SIZE        [400]
-    RAG_CHUNK_OVERLAP     [40]
     RAG_TOP_K_PER_KB      [4]
     RAG_TOP_K_FINAL       [6]
     RAG_SCORE_THRESHOLD   [None]
@@ -27,7 +24,6 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import uuid
 from datetime import datetime
 from typing import Any, AsyncIterator, TypedDict
 
@@ -36,20 +32,9 @@ from django.conf import settings
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 from langchain_core.runnables import RunnableConfig
 from langchain_openai import ChatOpenAI
-from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langgraph.graph import END, START, StateGraph
 from openai import AsyncOpenAI
 from qdrant_client import AsyncQdrantClient
-from qdrant_client.http.exceptions import UnexpectedResponse
-from qdrant_client.models import (
-    Distance,
-    FieldCondition,
-    Filter,
-    MatchValue,
-    PayloadSchemaType,
-    PointStruct,
-    VectorParams,
-)
 
 logger = logging.getLogger(__name__)
 
@@ -57,10 +42,7 @@ DEFAULT_SYSTEM_PROMPT = (
     "You are a helpful assistant. Answer only using the provided context. "
     "If the context does not contain the answer, say you don't know."
 )
-EMBED_BATCH_SIZE = 96
-UPSERT_BATCH_SIZE = 128
 MAX_STORED_MESSAGE_CHARS = 4000
-_NAMESPACE = uuid.UUID("6f1c2b0e-3b7a-4a55-9d0f-0c1d5a8f7e11")
 
 
 def _cfg(name: str, default: Any) -> Any:  #by this we can control from setting otherwise default value will be used
@@ -85,10 +67,17 @@ class RAGState(TypedDict, total=False):
 
 
 class RAGService:
-    def __init__(self) -> None:   #this is shared between all requests, so we can keep clients and semaphores here
+    """Async chat path only (ASGI). Never import/use this from Celery.
+
+    Ingestion + deletion live in ``common.rag_sync.SyncRAGIngestService``.
+    """
+
+    def __init__(self) -> None:   #lightweight config only; no I/O, no connections opened here
         self._embed_model = _cfg("RAG_EMBED_MODEL", "text-embedding-3-small")
-        self._embed_dim = _cfg("RAG_EMBED_DIM", 1536)
-        self._sem = asyncio.Semaphore(_cfg("RAG_MAX_CONCURRENCY", 8))
+        # Semaphore must be created INSIDE a running loop, not in __init__
+        # (which may run in a sync context). Created lazily on first async use.
+        self._sem: asyncio.Semaphore | None = None
+        self._sem_limit = _cfg("RAG_MAX_CONCURRENCY", 8)
 
         # Async clients (each keeps its own connection pool; share one instance per process)
         self.openai = AsyncOpenAI(
@@ -120,13 +109,14 @@ class RAGService:
             timeout=60,
             max_retries=2,
         )
-        self.splitter = RecursiveCharacterTextSplitter(
-            chunk_size=_cfg("RAG_CHUNK_SIZE", 400),
-            chunk_overlap=_cfg("RAG_CHUNK_OVERLAP", 40),
-        )
 
-        self._known_collections: set[str] = set()
         self.graph = self._build_graph()
+
+    def _get_sem(self) -> asyncio.Semaphore:
+        """Create the semaphore on first async use, i.e. inside the running loop."""
+        if self._sem is None:
+            self._sem = asyncio.Semaphore(self._sem_limit)
+        return self._sem
 
     async def aclose(self) -> None:
         """Call on application shutdown."""
@@ -135,102 +125,15 @@ class RAGService:
         await self.redis.aclose()
 
     # ----------------------------------------------------------------------- #
-    # Collection management
-    # ----------------------------------------------------------------------- #
-    async def ensure_collection(self, name: str) -> None:
-        if name in self._known_collections:
-            return
-        if not await self.qdrant.collection_exists(name):
-            try:
-                await self.qdrant.create_collection(
-                    collection_name=name,
-                    vectors_config=VectorParams(size=self._embed_dim, distance=Distance.COSINE),
-                )
-            except UnexpectedResponse as e:  # created concurrently by another worker
-                if e.status_code != 409:
-                    raise
-        # idempotent
-        await self.qdrant.create_payload_index(
-            collection_name=name,
-            field_name="document_id",
-            field_schema=PayloadSchemaType.KEYWORD,
-        )
-        self._known_collections.add(name)
-
-    async def delete_collection(self, name: str) -> None:
-        if await self.qdrant.collection_exists(name):
-            await self.qdrant.delete_collection(collection_name=name)
-        self._known_collections.discard(name)
-
-    # ----------------------------------------------------------------------- #
-    # Embeddings
+    # Embeddings (query only — chat path)
     # ----------------------------------------------------------------------- #
     async def _embed_batch(self, batch: list[str]) -> list[list[float]]:
-        async with self._sem:
+        async with self._get_sem():
             resp = await self.openai.embeddings.create(model=self._embed_model, input=batch)
         return [d.embedding for d in sorted(resp.data, key=lambda d: d.index)]
 
-    async def embed_documents(self, texts: list[str]) -> list[list[float]]:
-        batches = [texts[i : i + EMBED_BATCH_SIZE] for i in range(0, len(texts), EMBED_BATCH_SIZE)]
-        results = await asyncio.gather(*(self._embed_batch(b) for b in batches))
-        return [vec for batch in results for vec in batch]
-
     async def embed_query(self, text: str) -> list[float]:
         return (await self._embed_batch([text]))[0]
-
-    # ----------------------------------------------------------------------- #
-    # Ingestion
-    # ----------------------------------------------------------------------- #
-    async def ingest(self, kb, document, text: str, *, replace: bool = True) -> int:
-        """Chunk, embed and upsert a document. Safe to re-run (deterministic point ids)."""
-        await self.ensure_collection(kb.qdrant_collection)
-
-        # CPU-bound -> keep it off the event loop
-        chunks = await asyncio.to_thread(self.splitter.split_text, text)
-        if not chunks:
-            raise ValueError("No text content could be extracted from this file.")
-
-        vectors = await self.embed_documents(chunks)
-
-        doc_id = str(document.id)
-        points = [
-            PointStruct(
-                id=str(uuid.uuid5(_NAMESPACE, f"{doc_id}:{i}")),
-                vector=vec,
-                payload={
-                    "content": chunk,
-                    "document_id": doc_id,
-                    "filename": document.filename,
-                    "chunk_index": i,
-                },
-            )
-            for i, (chunk, vec) in enumerate(zip(chunks, vectors))
-        ]
-
-        # Embedding done first, so the window where the doc has no vectors is tiny.
-        if replace:
-            await self.delete_document_vectors(kb, doc_id)
-
-        for i in range(0, len(points), UPSERT_BATCH_SIZE):
-            async with self._sem:
-                await self.qdrant.upsert(
-                    collection_name=kb.qdrant_collection,
-                    points=points[i : i + UPSERT_BATCH_SIZE],
-                    wait=True,
-                )
-        return len(points)
-
-    async def delete_document_vectors(self, kb, document_id: str) -> None:
-        await self.qdrant.delete(
-            collection_name=kb.qdrant_collection,
-            points_selector=Filter(
-                must=[
-                    FieldCondition(
-                        key="document_id",
-                        match=MatchValue(value=str(document_id)))]
-            ),
-            wait=True,
-        )
 
     # ----------------------------------------------------------------------- #
     # Conversation memory (Redis list: atomic append + trim + TTL)
@@ -257,7 +160,7 @@ class RAGService:
     # ----------------------------------------------------------------------- #
     async def _search_collection(self, collection: str, vector: list[float]) -> list:
         try:
-            async with self._sem:
+            async with self._get_sem():
                 res = await self.qdrant.query_points(
                     collection_name=collection,
                     query=vector,
@@ -384,4 +287,25 @@ class RAGService:
         return {"answer": out["answer"], "sources": out.get("sources", [])}
 
 
-rag_service = RAGService()
+# --------------------------------------------------------------------------- #
+# Process-wide async singleton for the ASGI (web) process only.
+# Created lazily on first chat request, so importing this module never opens
+# connections and a missing env var can't crash Celery workers at import time.
+# --------------------------------------------------------------------------- #
+_rag_service: RAGService | None = None
+
+
+def get_rag_service() -> RAGService:
+    """Return the shared async chat service (ASGI long-lived loop only)."""
+    global _rag_service
+    if _rag_service is None:
+        _rag_service = RAGService()
+    return _rag_service
+
+
+async def aclose_rag_service() -> None:
+    """Call from ASGI lifespan shutdown when available."""
+    global _rag_service
+    if _rag_service is not None:
+        await _rag_service.aclose()
+        _rag_service = None
