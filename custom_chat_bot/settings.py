@@ -27,8 +27,13 @@ SECRET_KEY = os.environ.get("SECRET_KEY", "django-insecure-ljn1a(_#ui0(+-l0bk6%f
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.environ.get("DEBUG", "True") == "True"
 
-ALLOWED_HOSTS = ["localhost", "127.0.0.1"]  # Update this with your allowed hosts in production
-CORS_ALLOW_ALL_ORIGINS = True
+ALLOWED_HOSTS = ["localhost", "127.0.0.1", "rag-chat-bot-5yva.onrender.com"]  # Update this with your allowed hosts in production
+CORS_ALLOWED_ORIGINS = [
+    "https://harshraj709.github.io",
+]
+CSRF_TRUSTED_ORIGINS = [
+    "https://harshraj709.github.io",
+]
 
 
 # Application definition
