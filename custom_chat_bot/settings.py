@@ -138,6 +138,29 @@ FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:3000")
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
 
+# Supabase Storage (replaces local MEDIA_ROOT for KB documents).
+# SUPABASE_URL must be the API URL: https://<project-ref>.supabase.co
+# (NOT the aws-*.pooler.supabase.com DB host).
+SUPABASE_URL = os.environ.get("SUPABASE_URL", "").rstrip("/")
+SUPABASE_SERVICE_ROLE_KEY = os.environ.get(
+    "SUPABASE_SERVICE_ROLE_KEY", os.environ.get("SUPABASE_KEY", "")
+)
+SUPABASE_STORAGE_BUCKET = os.environ.get("SUPABASE_STORAGE_BUCKET", "kb-documents")
+
+if SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY:
+    DEFAULT_FILE_STORAGE_BACKEND = "common.supabase_storage.SupabaseStorage"
+else:
+    DEFAULT_FILE_STORAGE_BACKEND = "django.core.files.storage.FileSystemStorage"
+
+STORAGES = {
+    "default": {
+        "BACKEND": DEFAULT_FILE_STORAGE_BACKEND,
+    },
+    "staticfiles": {
+        "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
+    },
+}
+
 # Celery — broker + result backend share REDIS_URL by default.
 # Production: set CELERY_BROKER_URL / CELERY_RESULT_BACKEND explicitly
 # (e.g. separate Redis DBs) and run a persistent worker + beat.
