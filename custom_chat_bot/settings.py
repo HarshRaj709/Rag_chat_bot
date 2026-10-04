@@ -97,14 +97,20 @@ TEMPLATES = [
 ASGI_APPLICATION = "custom_chat_bot.asgi.application"
 
 
+import dj_database_url
+
 # Database
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases
+# Uses DATABASE_URL from .env (Supabase Postgres). Falls back to sqlite3 locally
+# if DATABASE_URL is not set.
 
 DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",
-    }
+    "default": dj_database_url.config(
+        default=f"sqlite:///{BASE_DIR / 'db.sqlite3'}",
+        conn_max_age=600,
+        conn_health_checks=True,
+        ssl_require=True,
+    )
 }
 
 
