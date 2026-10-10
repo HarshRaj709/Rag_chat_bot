@@ -46,7 +46,7 @@ class KBListCreateView(GetOrgMixin, ListCreateAPIView):
         return KnowledgeBase.objects.filter(org=self.get_org()).annotate(
             annotated_document_count=Count("documents", distinct=True),
             annotated_chunks_count=Coalesce(Sum("documents__chunk_count"), Value(0)),
-        )
+        ).order_by("-created_at")
     
 
 class KBDetailView(GetOrgMixin, RetrieveUpdateDestroyAPIView):
@@ -67,10 +67,10 @@ class KBDetailView(GetOrgMixin, RetrieveUpdateDestroyAPIView):
     
     def get_object(self):
         return get_object_or_404(
-            KnowledgeBase.objects.annotate(
+            KnowledgeBase.objects.select_related("org").annotate(
                 annotated_document_count=Count("documents", distinct=True),
                 annotated_chunks_count=Coalesce(Sum("documents__chunk_count"), Value(0)),
-            ),
+            ).prefetch_related("documents"),
             pk=self.kwargs["kb_pk"],
             org=self.get_org()
         )
@@ -92,17 +92,22 @@ class KBDocumentDetailView(GetOrgMixin, GenericAPIView):
     serializer_class = KBDocumentSerializer
 
     def get_object(self):
-        kb = get_object_or_404(KnowledgeBase, pk=self.kwargs["kb_pk"], org=self.get_org())
-        return get_object_or_404(KBDocument, pk=self.kwargs["doc_pk"], kb=kb)
+        # Single query (JOIN on kb__org) instead of one for the KB + one
+        # for the document.
+        return get_object_or_404(
+            KBDocument.objects.select_related("kb"),
+            pk=self.kwargs["doc_pk"],
+            kb__pk=self.kwargs["kb_pk"],
+            kb__org=self.get_org(),
+        )
 
     def get(self, request, *args, **kwargs):
         return Response(KBDocumentSerializer(self.get_object()).data)
 
     def delete(self, request, *args, **kwargs):
-        kb = get_object_or_404(KnowledgeBase, pk=self.kwargs["kb_pk"], org=self.get_org())
-        document = get_object_or_404(KBDocument, pk=self.kwargs["doc_pk"], kb=kb)
+        document = self.get_object()
 
-        collection = kb.qdrant_collection
+        collection = document.kb.qdrant_collection
         doc_id = str(document.id)
         storage_path = document.storage_path
         document.delete()
@@ -165,8 +170,12 @@ class KBDocumentRetryView(GetOrgMixin, GenericAPIView):
     serializer_class = KBDocumentSerializer
 
     def post(self, request, *args, **kwargs):
-        kb = get_object_or_404(KnowledgeBase, pk=self.kwargs["kb_pk"], org=self.get_org())
-        document = get_object_or_404(KBDocument, pk=self.kwargs["doc_pk"], kb=kb)
+        document = get_object_or_404(
+            KBDocument,
+            pk=self.kwargs["doc_pk"],
+            kb__pk=self.kwargs["kb_pk"],
+            kb__org=self.get_org(),
+        )
 
         if document.status in (KBDocument.STATUS_PENDING, KBDocument.STATUS_PROCESSING):
             return Response(

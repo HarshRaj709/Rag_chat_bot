@@ -9,6 +9,7 @@ from django.shortcuts import get_object_or_404
 from rest_framework import status
 from rest_framework.exceptions import PermissionDenied
 from django.db import transaction
+from django.db.models import Prefetch
 
 
 class OrgListView(ListAPIView):
@@ -34,7 +35,12 @@ class OrgDetailView(RetrieveAPIView):
     def get_queryset(self):
         return Organisation.objects.filter(
             members__user=self.request.user
-        ).prefetch_related("members")
+        ).select_related("created_by").prefetch_related(
+            Prefetch(
+                "members",
+                queryset=OrgMembership.objects.select_related("user"),
+            )
+        )
 
 
 class DeleteOrganizationView(DestroyAPIView):

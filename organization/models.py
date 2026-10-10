@@ -61,6 +61,10 @@ class OrgMembership(BaseModel):
         constraints = [
             models.UniqueConstraint(fields=["user", "org"], name="unique_membership")
         ]
+        indexes = [
+            models.Index(fields=["org", "role"]),
+            models.Index(fields=["user", "org"]),
+        ]
 
     def __str__(self):
         return f"{self.user.username} in {self.org.name}"
@@ -84,8 +88,12 @@ class OrgInvite(BaseModel):
             models.UniqueConstraint(
                 fields=["org", "email"],
                 condition=models.Q(status="pending"),
-                name="unique_pending_invite"
+                name="unique_pending_invite",
             )
+        ]
+        indexes = [
+            models.Index(fields=["org", "status"]),
+            models.Index(fields=["token", "status"]),
         ]
 
     def save(self, *args, **kwargs):

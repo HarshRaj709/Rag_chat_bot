@@ -49,7 +49,15 @@ class OrgDetailSerializer(serializers.ModelSerializer):
 
     def get_user_role(self, obj):
         user = self.context['request'].user
-        membership=OrgMembership.objects.filter(user=user, org=obj).first()
+        # Uses the members prefetched by OrgDetailView.get_queryset —
+        # no extra query. Falls back to a query for other call sites.
+        members = getattr(obj, "_prefetched_objects_cache", {}).get("members")
+        if members is not None:
+            for member in members:
+                if member.user_id == user.id:
+                    return member.role
+            return None
+        membership = OrgMembership.objects.filter(user=user, org=obj).first()
         return membership.role if membership else None
     
     def get_members(self, obj):

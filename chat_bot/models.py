@@ -42,6 +42,12 @@ class Bot(BaseModel):
     def __str__(self):
         return f"{self.org.name} / {self.name}"
 
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["org", "is_active", "-created_at"]),
+        ]
+
 
 class BotAPIKey(BaseModel):
     bot = models.ForeignKey(Bot, on_delete=models.CASCADE, related_name="api_keys")
@@ -66,6 +72,11 @@ class BotAPIKey(BaseModel):
 
     def __str__(self):
         return f"{self.bot.name} / {self.name}"
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["bot", "is_active"]),
+        ]
 
 
 class BotUsage(BaseModel):

@@ -109,7 +109,10 @@ DATABASES = {
         default=f"sqlite:///{BASE_DIR / 'db.sqlite3'}",
         conn_max_age=600,
         conn_health_checks=True,
-        ssl_require=True,
+        # Only Postgres understands sslmode — passing ssl_require=True
+        # unconditionally breaks local sqlite (TypeError: 'sslmode' is an
+        # invalid keyword argument) and adds nothing for sqlite.
+        ssl_require=os.environ.get("DATABASE_URL", "").startswith("postgres"),
     )
 }
 

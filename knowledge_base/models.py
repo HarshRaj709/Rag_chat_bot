@@ -26,6 +26,9 @@ class KnowledgeBase(BaseModel):
             )
         ]
         ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=["org", "-created_at"]),
+        ]
 
 
 class KBDocument(BaseModel):
@@ -48,3 +51,9 @@ class KBDocument(BaseModel):
     error_message = models.TextField(blank=True, default="")
     chunk_count = models.IntegerField(default=0)
     ingested_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["kb", "status"]),
+        ]

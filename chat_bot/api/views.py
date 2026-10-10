@@ -3,6 +3,8 @@ from django.http import StreamingHttpResponse, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
 from django.shortcuts import get_object_or_404
+from django.db.models import Count, Prefetch, Sum, Value
+from django.db.models.functions import Coalesce
 from asgiref.sync import sync_to_async
 from urllib.parse import urlparse
 from common.rag import get_rag_service
@@ -14,6 +16,7 @@ from rest_framework import status
 from django.views import View
 
 from organization.models import Organisation
+from knowledge_base.models import KnowledgeBase
 from chat_bot.models import Bot, BotAPIKey
 from common.permissions import IsOrgMember
 from .serializers import BotSerializer, BotDetailSerializer
@@ -32,7 +35,7 @@ class BotListCreateView(GetOrgMixin, ListCreateAPIView):
     def get_queryset(self):
         return Bot.objects.filter(
             org=self.get_org(), is_active=True
-        ).prefetch_related("kbs", "api_keys")
+        ).order_by("-created_at")
 
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
@@ -55,8 +58,15 @@ class BotDetailView(GetOrgMixin, RetrieveUpdateAPIView):
         return context
 
     def get_object(self):
+        annotated_kbs = KnowledgeBase.objects.annotate(
+            annotated_document_count=Count("documents", distinct=True),
+            annotated_chunks_count=Coalesce(Sum("documents__chunk_count"), Value(0)),
+        ).prefetch_related("documents")
         return get_object_or_404(
-            Bot,
+            Bot.objects.select_related("org").prefetch_related(
+                Prefetch("kbs", queryset=annotated_kbs),
+                "api_keys",
+            ),
             pk=self.kwargs["bot_pk"],
             org=self.get_org(),
             is_active=True,
