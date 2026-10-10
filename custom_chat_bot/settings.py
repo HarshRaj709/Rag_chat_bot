@@ -138,6 +138,12 @@ DEFAULT_FROM_EMAIL = os.environ.get(
 
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:3000")
 
+# Google Sign-In (Google Identity Services ID-token flow).
+# Create an OAuth client at https://console.cloud.google.com/apis/credentials
+# (type: Web application) and set its client ID here. The SPA sends the
+# ID token to POST /api/auth/google/; we verify it and return our own JWTs.
+GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "")
+
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
 

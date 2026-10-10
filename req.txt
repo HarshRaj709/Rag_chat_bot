@@ -26,3 +26,4 @@ django-extensions==4.1
 requests==2.31.0
 celery==5.4.0
 supabase==2.32.0
+google-auth==2.40.3
